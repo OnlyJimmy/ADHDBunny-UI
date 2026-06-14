@@ -12,7 +12,7 @@ const ROOT_ID = 'pwl-workspace-controls';
 const SETTINGS_ID = 'pwl-settings';
 
 const defaults = {
-    enabled: true,
+    enabled: false,
     minimumWidth: 1100,
     inspectorWidthPercent: 50,
     guidedRailCollapsed: false,
