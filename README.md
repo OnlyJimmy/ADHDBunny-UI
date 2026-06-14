@@ -1,6 +1,7 @@
 # ADHDBunny UI
 
-A desktop-first SillyBunny UI overhaul designed to keep chat central while
+SillyBunny has a beautiful UI. Don't you wish you couldn't see any of it so you wouldn't get distracted?
+ADHDBunny is a desktop-first SillyBunny UI overhaul designed to keep chat central while
 making common tools easier to reach.
 
 ## Regions
