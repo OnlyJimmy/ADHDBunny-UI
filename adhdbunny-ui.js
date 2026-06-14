@@ -304,20 +304,36 @@ function dispatchClick(element) {
     }));
 }
 
+function cancelPendingCharacterEditor() {
+    window.clearTimeout(pendingCharacterEditor?.timeoutId);
+    pendingCharacterEditor = null;
+}
+
 function openPendingCharacterEditor() {
     if (!pendingCharacterEditor || Number(this_chid) !== pendingCharacterEditor.chid) {
         return false;
     }
 
-    window.clearTimeout(pendingCharacterEditor.timeoutId);
-    pendingCharacterEditor = null;
-    dispatchClick(document.getElementById('sb_character_tab_editor'));
+    cancelPendingCharacterEditor();
+    if (typeof window.SillyBunnyShell?.openTab === 'function') {
+        window.SillyBunnyShell.openTab('characters', 'editor');
+    } else {
+        dispatchClick(document.getElementById('sb_character_tab_editor'));
+    }
     requestAnimationFrame(syncInspectorState);
     return true;
 }
 
 function handleCharacterCardSelection(event) {
     if (!document.body.classList.contains('pwl-layout-active') || event.shiftKey) {
+        return;
+    }
+
+    const characterPanel = document.getElementById('right-nav-panel');
+    const charactersTab = characterPanel?.querySelector('[data-sb-character-tab="characters"]');
+    const charactersViewActive = characterPanel?.dataset.menuType === 'characters'
+        && charactersTab?.getAttribute('aria-selected') === 'true';
+    if (!charactersViewActive) {
         return;
     }
 
@@ -435,6 +451,20 @@ function openTool(tool, button) {
             dispatchClick(document.querySelector(`${otherTool.host} > .drawer-toggle`));
             closedDrawers.add(otherDrawer);
         }
+    }
+
+    const isCharacterSection = tool.host === '#rightNavHolder';
+    if (isCharacterSection) {
+        cancelPendingCharacterEditor();
+    }
+
+    if (isCharacterSection && typeof window.SillyBunnyShell?.openTab === 'function') {
+        window.SillyBunnyShell.openTab('characters', tool.id);
+        document.querySelectorAll('.pwl-tool').forEach(item => item.classList.remove('is-active'));
+        button.classList.add('is-active');
+        setMenuOpen(false);
+        requestAnimationFrame(() => requestAnimationFrame(syncInspectorState));
+        return;
     }
 
     if (!isDrawerOpen(drawer)) {
