@@ -28,17 +28,17 @@ Open SillyBunny's Extensions panel, choose **Install Extension**, and enter:
 
 `https://github.com/OnlyJimmy/ADHDBunny-UI`
 
-After installation, open ADHDBunny UI's extension settings, enable the desktop
-workspace layout, and refresh SillyBunny. The layout intentionally remains
-inactive until that refresh to avoid changing the interface during installation.
+After installation, ADHDBunny UI queues the desktop workspace layout for
+activation and displays a refresh notice. The layout intentionally remains
+inactive until SillyBunny is refreshed, avoiding interface changes during
+installation.
 
 ### Manual installation
 
 1. Close SillyBunny.
 2. Extract the `ADHDBunny-UI` folder into `public/scripts/extensions/third-party/`.
 3. Start SillyBunny and refresh the page.
-4. Open Extensions, enable the desktop workspace layout under **ADHDBunny UI**,
-   and refresh SillyBunny.
+4. Refresh SillyBunny when the ADHDBunny UI installation notice appears.
 
 The final path should contain:
 `public/scripts/extensions/third-party/ADHDBunny-UI/manifest.json`

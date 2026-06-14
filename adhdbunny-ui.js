@@ -12,7 +12,7 @@ const ROOT_ID = 'pwl-workspace-controls';
 const SETTINGS_ID = 'pwl-settings';
 
 const defaults = {
-    enabled: false,
+    enabled: true,
     minimumWidth: 1100,
     inspectorWidthPercent: 50,
     guidedRailCollapsed: false,
@@ -53,6 +53,8 @@ let menuDismissHandlersAttached = false;
 let pendingCharacterEditor = null;
 let initialized = false;
 let enabledForSession;
+let firstInstallPending = false;
+let firstInstallNoticeShown = false;
 
 function getSettings() {
     const legacySettings = extension_settings[LEGACY_EXTENSION_NAME];
@@ -66,6 +68,8 @@ function getSettings() {
     const migratedSettings = extension_settings[EXTENSION_NAME];
     if (!migratedSettings || typeof migratedSettings !== 'object') {
         extension_settings[EXTENSION_NAME] = { ...defaults };
+        firstInstallPending = true;
+        saveSettingsDebounced();
     } else {
         for (const [key, value] of Object.entries(defaults)) {
             if (!(key in migratedSettings)) {
@@ -731,6 +735,7 @@ function injectSettings() {
     const minimumWidth = panel.querySelector('#pwl-minimum-width');
     const inspectorWidthPercent = panel.querySelector('#pwl-inspector-width-percent');
     enabled.checked = settings.enabled;
+    refreshRequired.hidden = enabled.checked === enabledForSession;
     minimumWidth.value = settings.minimumWidth;
     inspectorWidthPercent.value = settings.inspectorWidthPercent;
 
@@ -758,12 +763,26 @@ function injectSettings() {
 
 function init() {
     const settings = getSettings();
-    enabledForSession ??= Boolean(settings.enabled);
+    enabledForSession ??= firstInstallPending ? false : Boolean(settings.enabled);
     buildWorkspaceControls();
     injectSettings();
     watchDrawers();
     watchGuidedActions();
     applySettings();
+
+    if (firstInstallPending && !firstInstallNoticeShown) {
+        firstInstallNoticeShown = true;
+        toastr.info(
+            'Refresh SillyBunny to enable the ADHDBunny UI layout.',
+            'ADHDBunny UI installed',
+            {
+                closeButton: true,
+                extendedTimeOut: 0,
+                preventDuplicates: true,
+                timeOut: 0,
+            },
+        );
+    }
 
     if (!initialized) {
         initialized = true;
