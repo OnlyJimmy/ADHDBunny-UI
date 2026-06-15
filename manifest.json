@@ -1,7 +1,7 @@
 {
     "display_name": "ADHDBunny UI",
     "author": "OnlyJimmy",
-    "version": "0.4.3",
+    "version": "0.5.0",
     "description": "A desktop-first chat workspace with a left tool rail, central chat, side action bar, and persistent inspector.",
     "requires": [],
     "optional": [

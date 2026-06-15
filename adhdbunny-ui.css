@@ -34,6 +34,8 @@ body.pwl-layout-active #pwl-workspace-controls {
     border-radius: 50%;
     overflow: hidden;
     transition:
+        left 220ms ease,
+        top 240ms ease,
         width 220ms ease,
         height 240ms ease,
         border-radius 220ms ease;
@@ -41,8 +43,16 @@ body.pwl-layout-active #pwl-workspace-controls {
 
 body.pwl-menu-open #pwl-tool-rail {
     width: calc(var(--pwl-menu-width) + 58px);
-    height: min(520px, calc(100dvh - var(--pwl-menu-top, var(--pwl-gap)) - var(--pwl-gap)));
+    height: var(--pwl-menu-expanded-height, min(520px, calc(100dvh - var(--pwl-menu-top, var(--pwl-gap)) - var(--pwl-gap))));
     border-radius: 24px;
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-left {
+    left: calc(var(--pwl-menu-left, var(--pwl-gap)) - var(--pwl-menu-width) - 4px);
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-up {
+    top: calc(var(--pwl-menu-top, var(--pwl-gap)) + 54px - var(--pwl-menu-expanded-height));
 }
 
 #pwl-menu-toggle,
@@ -62,6 +72,28 @@ body.pwl-menu-open #pwl-tool-rail {
     display: grid;
     place-items: center;
     font-size: 20px;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+body.pwl-menu-draggable #pwl-menu-toggle {
+    cursor: grab;
+}
+
+#pwl-menu-toggle.pwl-menu-dragging {
+    cursor: grabbing;
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-left #pwl-menu-toggle {
+    position: absolute;
+    right: 4px;
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-up #pwl-menu-toggle {
+    position: absolute;
+    bottom: 4px;
 }
 
 #pwl-tool-list {
@@ -80,18 +112,42 @@ body.pwl-menu-open #pwl-tool-rail {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transform: translateX(-14px);
+    transform: translate(-14px, -10px);
     transition:
         opacity 160ms ease,
         transform 220ms ease,
         visibility 0s linear 220ms;
 }
 
+#pwl-tool-rail.pwl-menu-opens-left #pwl-tool-list {
+    transform: translate(14px, -10px);
+}
+
+#pwl-tool-rail.pwl-menu-opens-up #pwl-tool-list {
+    transform: translate(-14px, 10px);
+}
+
+#pwl-tool-rail.pwl-menu-opens-left.pwl-menu-opens-up #pwl-tool-list {
+    transform: translate(14px, 10px);
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-left #pwl-tool-list {
+    right: 58px;
+    left: auto;
+    border-right: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 76%, transparent);
+    border-left: 0;
+}
+
+body.pwl-menu-open #pwl-tool-rail.pwl-menu-opens-up #pwl-tool-list {
+    top: 0;
+    bottom: 58px;
+}
+
 body.pwl-menu-open #pwl-tool-list {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translateX(0);
+    transform: translate(0, 0);
     transition-delay: 70ms, 0ms, 0s;
 }
 
@@ -102,6 +158,36 @@ body.pwl-menu-open #pwl-tool-list {
     width: 100%;
     padding: 4px 8px;
     text-align: left;
+}
+
+#pwl-menu-reset-position {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+    min-height: 42px;
+    margin-top: auto;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    border-top-color: color-mix(in srgb, var(--SmartThemeBorderColor) 76%, transparent);
+    border-radius: 0 0 11px 11px;
+    color: var(--SmartThemeBodyColor);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+body:not(.pwl-menu-draggable) #pwl-menu-reset-position {
+    display: none;
+}
+
+#pwl-menu-reset-position:hover {
+    border-color: var(--SmartThemeBorderColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent);
+}
+
+#pwl-menu-reset-position .fa-solid {
+    text-align: center;
 }
 
 .pwl-tree-group {
@@ -219,18 +305,30 @@ body.pwl-menu-open #pwl-tool-list {
     right: auto;
     bottom: var(--pwl-action-bottom, var(--pwl-gap));
     width: var(--pwl-action-width);
-    min-height: 58px;
+    height: min(
+        var(--pwl-guided-expanded-height, 520px),
+        calc(100dvh - var(--pwl-action-bottom, var(--pwl-gap)) - var(--pwl-gap))
+    );
     max-height: calc(100dvh - var(--pwl-action-bottom, var(--pwl-gap)) - var(--pwl-gap));
     border-radius: 15px;
-    overflow: visible;
+    overflow: hidden;
+    transition:
+        left 220ms ease,
+        width 220ms ease,
+        height 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        border-radius 220ms ease;
 }
 
 #pwl-composer-actions-toggle {
+    position: absolute;
+    z-index: 2;
+    right: 5px;
+    bottom: 5px;
     display: grid;
     place-items: center;
     width: 46px;
     height: 28px;
-    margin: 5px;
+    margin: 0;
     padding: 0;
     border: 0;
     border-radius: 10px;
@@ -265,55 +363,180 @@ body.pwl-layout-active #pwl-bottom-chat-bar-toggle:hover {
     background: color-mix(in srgb, var(--SmartThemeBodyColor) 15%, transparent);
 }
 
+body.pwl-layout-active #sb-bottom-chat-bar {
+    position: relative;
+    max-height: 80px;
+    transform: translateY(0);
+    transform-origin: bottom center;
+    transition:
+        max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+        min-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+        margin-block-end 240ms cubic-bezier(0.22, 1, 0.36, 1),
+        padding-block 220ms ease,
+        border-color 160ms ease,
+        background-color 180ms ease,
+        box-shadow 180ms ease,
+        transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+body.pwl-layout-active #sb-bottom-chat-bar > :not(#pwl-bottom-chat-bar-toggle) {
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+        opacity 140ms ease 70ms,
+        transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0s;
+}
+
 body.pwl-layout-active #form_sheld {
     position: relative;
+    overflow: visible;
+}
+
+body.pwl-layout-active #send_form {
+    position: relative;
+    z-index: 2;
 }
 
 body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed {
-    position: absolute;
+    position: relative;
     z-index: 4;
-    right: var(--sb-chat-composer-edge-gap, 8px);
-    bottom: calc(100% - 2px);
-    width: max-content;
-    min-height: 0;
+    max-height: 1px;
+    min-height: 1px;
+    height: 1px;
     margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
+    padding-block: 0;
+    border-color: transparent;
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    overflow: visible;
+    transform: translateY(8px);
 }
 
 body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed > :not(#pwl-bottom-chat-bar-toggle) {
-    display: none !important;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition:
+        opacity 100ms ease,
+        transform 180ms ease,
+        visibility 0s linear 220ms;
 }
 
 body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed #pwl-bottom-chat-bar-toggle {
+    position: absolute;
+    z-index: 4;
+    right: calc(var(--sb-chat-composer-edge-gap, 8px) + 16px);
+    bottom: 7px;
     width: 58px;
     min-width: 58px;
-    height: 22px;
+    height: 31px;
     margin-left: 0;
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
-    border-bottom-color: var(--sb-composer-surface-bg, var(--SmartThemeBlurTintColor));
+    border-bottom-color: transparent;
     border-radius: 9px 9px 0 0;
     background: var(--SmartThemeBlurTintColor) !important;
     box-shadow: none;
+    clip-path: inset(24px 0 0 0 round 9px 9px 0 0);
+    transform: translateY(0);
+    transition:
+        background 140ms ease,
+        clip-path 180ms ease;
 }
 
-body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed #pwl-bottom-chat-bar-toggle:hover {
+body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed::before {
+    content: '';
+    position: absolute;
+    z-index: 5;
+    right: calc(var(--sb-chat-composer-edge-gap, 8px) + 16px);
+    bottom: 7px;
+    width: 58px;
+    height: 7px;
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 72%, transparent);
+    border-bottom: 0;
+    border-radius: 9px 9px 0 0;
+    background: var(--SmartThemeBlurTintColor);
+    pointer-events: none;
+    transition: opacity 100ms ease;
+}
+
+body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed:has(
+    #pwl-bottom-chat-bar-toggle:is(:hover, :focus-visible)
+)::before {
+    opacity: 0;
+}
+
+body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed #pwl-bottom-chat-bar-toggle .fa-solid {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed #pwl-bottom-chat-bar-toggle:is(:hover, :focus-visible) {
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, var(--SmartThemeBodyColor) 16%) !important;
+    clip-path: inset(0 round 9px 9px 0 0);
+}
+
+body.pwl-layout-active #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed #pwl-bottom-chat-bar-toggle:is(:hover, :focus-visible) .fa-solid {
+    opacity: 1;
 }
 
 #pwl-composer-actions.pwl-composer-actions-collapsed {
-    min-height: 38px;
-    max-height: 38px;
+    left: calc(var(--pwl-action-left, calc(83.334vw + 8px)) - 8px);
+    width: 8px;
+    height: 46px;
+    min-height: 46px;
+    max-height: 46px;
+    border-radius: 0 12px 12px 0;
+}
+
+#pwl-composer-actions.pwl-composer-actions-collapsed:is(:hover, :focus-within) {
+    width: 24px;
+}
+
+#pwl-composer-actions.pwl-composer-actions-collapsed #pwl-composer-actions-toggle {
+    right: 1px;
+    bottom: 1px;
+    width: 22px;
+    height: 42px;
+    border-radius: 0 10px 10px 0;
+}
+
+#pwl-composer-actions.pwl-composer-actions-collapsed #pwl-composer-actions-toggle .fa-solid {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+#pwl-composer-actions.pwl-composer-actions-collapsed:is(:hover, :focus-within) #pwl-composer-actions-toggle .fa-solid {
+    opacity: 1;
+}
+
+#pwl-composer-actions #gg-action-button-container,
+#pwl-composer-actions #pwl-action-placeholder {
+    padding-bottom: 38px;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0);
+    transition:
+        opacity 160ms ease 90ms,
+        transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 0s;
 }
 
 #pwl-composer-actions.pwl-composer-actions-collapsed #gg-action-button-container,
 #pwl-composer-actions.pwl-composer-actions-collapsed #pwl-action-placeholder {
-    display: none !important;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(24px);
+    transition:
+        opacity 100ms ease,
+        transform 220ms ease,
+        visibility 0s linear 220ms;
 }
 
 #pwl-action-placeholder {
@@ -500,6 +723,10 @@ body.pwl-layout-active .drawer-content.pwl-inspector-drawer {
         -10px 0 30px color-mix(in srgb, var(--SmartThemeShadowColor) 20%, transparent) !important;
 }
 
+body.pwl-layout-active .drawer-content.pwl-inspector-drawer .sb-shell-resize-handle {
+    display: none !important;
+}
+
 body.pwl-layout-active #right-nav-panel.pwl-inspector-drawer > .sb-character-shell-nav-wrapper {
     display: none !important;
 }
@@ -541,6 +768,51 @@ body.pwl-layout-active .drawer-content.pwl-inspector-drawer .sb-shell-panel-scro
 
 #pwl-settings .inline-drawer-content {
     padding: 8px 4px 12px;
+}
+
+#pwl-settings-reset-menu-position {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    margin: 4px 0 6px 24px;
+}
+
+.pwl-settings-group-label {
+    margin: 10px 0 4px;
+    font-weight: 650;
+}
+
+body.pwl-no-menu-animations :is(
+    #pwl-tool-rail,
+    #pwl-tool-list,
+    .pwl-tree-chevron,
+    .pwl-tree-children,
+    .pwl-tool-label
+) {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+}
+
+body.pwl-no-composer-bar-animations :is(
+    #sb-bottom-chat-bar,
+    #sb-bottom-chat-bar > :not(#pwl-bottom-chat-bar-toggle),
+    #pwl-bottom-chat-bar-toggle,
+    #pwl-bottom-chat-bar-toggle .fa-solid,
+    #sb-bottom-chat-bar.pwl-bottom-chat-bar-collapsed::before
+) {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+}
+
+body.pwl-no-guided-rail-animations :is(
+    #pwl-composer-actions,
+    #pwl-composer-actions-toggle .fa-solid,
+    #pwl-composer-actions #gg-action-button-container,
+    #pwl-composer-actions #pwl-action-placeholder
+) {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
 }
 
 #pwl-refresh-required {

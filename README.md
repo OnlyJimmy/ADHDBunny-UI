@@ -49,3 +49,11 @@ The final path should contain:
 ADHDBunny UI targets SillyBunny's desktop layout. The stock layout remains
 active below the configured minimum viewport width. Settings from the former
 Personal Workspace Layout name are migrated automatically.
+
+## Workspace controls
+
+- Drag the hamburger menu to reposition it, or disable dragging in extension settings.
+- Reset the hamburger position from either the menu or extension settings.
+- The hamburger menu expands away from nearby viewport edges.
+- Collapse the bar above the composer and the Guided Generations action rail into compact hover tabs.
+- Hamburger, composer-bar, and Guided Generations animations can be disabled independently.

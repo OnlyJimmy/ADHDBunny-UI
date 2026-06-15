@@ -17,6 +17,11 @@ const defaults = {
     inspectorWidthPercent: 50,
     guidedRailCollapsed: false,
     bottomChatBarCollapsed: false,
+    draggableMenu: true,
+    animateHamburgerMenu: true,
+    animateComposerBar: true,
+    animateGuidedRail: true,
+    menuPosition: null,
     floatingInspectorMigrated: false,
     proportionalInspectorMigrated: false,
 };
@@ -55,6 +60,8 @@ let initialized = false;
 let enabledForSession;
 let firstInstallPending = false;
 let firstInstallNoticeShown = false;
+let menuDragState = null;
+let suppressMenuToggleClick = false;
 
 function getSettings() {
     const legacySettings = extension_settings[LEGACY_EXTENSION_NAME];
@@ -182,12 +189,27 @@ function buildWorkspaceControls() {
 
     const list = root.querySelector('#pwl-tool-list');
     toolGroups.forEach(group => list.append(createToolGroup(group)));
+    const resetPosition = document.createElement('button');
+    resetPosition.id = 'pwl-menu-reset-position';
+    resetPosition.type = 'button';
+    resetPosition.innerHTML = `
+        <span class="fa-solid fa-location-crosshairs" aria-hidden="true"></span>
+        <span>Reset Position</span>
+    `;
+    resetPosition.addEventListener('click', resetMenuPosition);
+    list.append(resetPosition);
     document.body.append(root);
 
-    root.querySelector('#pwl-menu-toggle').addEventListener('click', event => {
+    const menuToggle = root.querySelector('#pwl-menu-toggle');
+    menuToggle.addEventListener('click', event => {
         event.stopPropagation();
+        if (suppressMenuToggleClick) {
+            suppressMenuToggleClick = false;
+            return;
+        }
         setMenuOpen(!menuOpen);
     });
+    menuToggle.addEventListener('pointerdown', startMenuDrag);
     root.querySelector('#pwl-composer-actions-toggle').addEventListener('click', () => {
         const settings = getSettings();
         settings.guidedRailCollapsed = !settings.guidedRailCollapsed;
@@ -196,6 +218,153 @@ function buildWorkspaceControls() {
     });
     root.querySelector('#pwl-tool-list').addEventListener('click', event => event.stopPropagation());
     attachMenuDismissHandlers();
+}
+
+function clampMenuPosition(left, top) {
+    const buttonSize = 54;
+    return {
+        left: Math.min(Math.max(4, Math.round(left)), Math.max(4, window.innerWidth - buttonSize - 4)),
+        top: Math.min(Math.max(4, Math.round(top)), Math.max(4, window.innerHeight - buttonSize - 4)),
+    };
+}
+
+function applyMenuPosition(position) {
+    if (!position || !Number.isFinite(position.left) || !Number.isFinite(position.top)) {
+        return false;
+    }
+
+    const clamped = clampMenuPosition(position.left, position.top);
+    const root = document.documentElement;
+    root.style.setProperty('--pwl-menu-left', `${clamped.left}px`);
+    root.style.setProperty('--pwl-menu-top', `${clamped.top}px`);
+    return clamped;
+}
+
+function resetMenuPosition() {
+    const settings = getSettings();
+    settings.menuPosition = null;
+    saveSettingsDebounced();
+    setMenuOpen(false);
+    syncComposerActionsGeometry();
+}
+
+function applyDraggableMenuSetting() {
+    const draggable = Boolean(getSettings().draggableMenu);
+    document.body.classList.toggle('pwl-menu-draggable', draggable);
+    if (!draggable) {
+        setMenuOpen(false);
+    }
+    syncComposerActionsGeometry();
+}
+
+function applyAnimationSettings() {
+    const settings = getSettings();
+    document.body.classList.toggle('pwl-no-menu-animations', !settings.animateHamburgerMenu);
+    document.body.classList.toggle('pwl-no-composer-bar-animations', !settings.animateComposerBar);
+    document.body.classList.toggle('pwl-no-guided-rail-animations', !settings.animateGuidedRail);
+}
+
+function syncMenuExpansionDirection() {
+    const rail = document.getElementById('pwl-tool-rail');
+    if (!rail) {
+        return;
+    }
+
+    const settings = getSettings();
+    const position = settings.menuPosition
+        ? clampMenuPosition(settings.menuPosition.left, settings.menuPosition.top)
+        : { left: rail.getBoundingClientRect().left, top: rail.getBoundingClientRect().top };
+    const expandedWidth = 308;
+    const preferredHeight = 520;
+    const gap = 4;
+    const spaceRight = window.innerWidth - position.left;
+    const spaceLeft = position.left + 54;
+    const spaceBelow = window.innerHeight - position.top;
+    const spaceAbove = position.top + 54;
+    const openLeft = spaceRight < expandedWidth && spaceLeft > spaceRight;
+    const openUp = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+    const availableHeight = Math.max(54, (openUp ? spaceAbove : spaceBelow) - gap);
+
+    rail.classList.toggle('pwl-menu-opens-left', openLeft);
+    rail.classList.toggle('pwl-menu-opens-up', openUp);
+    rail.style.setProperty('--pwl-menu-expanded-height', `${Math.min(preferredHeight, availableHeight)}px`);
+}
+
+function startMenuDrag(event) {
+    if (!getSettings().draggableMenu || event.button !== 0 || !event.isPrimary) {
+        return;
+    }
+
+    const rail = document.getElementById('pwl-tool-rail');
+    const toggle = document.getElementById('pwl-menu-toggle');
+    if (!rail || !toggle) {
+        return;
+    }
+
+    const rect = toggle.getBoundingClientRect();
+    menuDragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        left: rect.left - 5,
+        top: rect.top - 5,
+        moved: false,
+    };
+    toggle.setPointerCapture(event.pointerId);
+    toggle.classList.add('pwl-menu-dragging');
+    toggle.addEventListener('pointermove', moveMenuDrag);
+    toggle.addEventListener('pointerup', finishMenuDrag);
+    toggle.addEventListener('pointercancel', finishMenuDrag);
+}
+
+function moveMenuDrag(event) {
+    if (!menuDragState || event.pointerId !== menuDragState.pointerId) {
+        return;
+    }
+
+    const deltaX = event.clientX - menuDragState.startX;
+    const deltaY = event.clientY - menuDragState.startY;
+    if (!menuDragState.moved && Math.hypot(deltaX, deltaY) < 5) {
+        return;
+    }
+
+    menuDragState.moved = true;
+    setMenuOpen(false);
+    event.preventDefault();
+    applyMenuPosition({
+        left: menuDragState.left + deltaX,
+        top: menuDragState.top + deltaY,
+    });
+}
+
+function finishMenuDrag(event) {
+    if (!menuDragState || event.pointerId !== menuDragState.pointerId) {
+        return;
+    }
+
+    const toggle = document.getElementById('pwl-menu-toggle');
+    const moved = menuDragState.moved;
+    menuDragState = null;
+    toggle?.classList.remove('pwl-menu-dragging');
+    toggle?.removeEventListener('pointermove', moveMenuDrag);
+    toggle?.removeEventListener('pointerup', finishMenuDrag);
+    toggle?.removeEventListener('pointercancel', finishMenuDrag);
+
+    if (!moved) {
+        return;
+    }
+
+    suppressMenuToggleClick = event.type === 'pointerup';
+    const rail = document.getElementById('pwl-tool-rail');
+    if (!rail) {
+        return;
+    }
+
+    const settings = getSettings();
+    const rect = rail.getBoundingClientRect();
+    settings.menuPosition = clampMenuPosition(rect.left, rect.top);
+    applyMenuPosition(settings.menuPosition);
+    saveSettingsDebounced();
 }
 
 function setGuidedRailCollapsed(collapsed) {
@@ -209,8 +378,8 @@ function setGuidedRailCollapsed(collapsed) {
     toggle.title = collapsed ? 'Expand Guided Generations rail' : 'Collapse Guided Generations rail';
     toggle.setAttribute('aria-label', toggle.title);
     toggle.setAttribute('aria-expanded', String(!collapsed));
-    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-up', collapsed);
-    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-down', !collapsed);
+    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-right', collapsed);
+    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-up', !collapsed);
 }
 
 function ensureBottomChatBarToggle() {
@@ -254,12 +423,17 @@ function setBottomChatBarCollapsed(collapsed) {
     toggle.title = collapsed ? 'Expand bar above composer' : 'Collapse bar above composer';
     toggle.setAttribute('aria-label', toggle.title);
     toggle.setAttribute('aria-expanded', String(!collapsed));
-    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-down', collapsed);
-    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-up', !collapsed);
+    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-up', collapsed);
+    toggle.querySelector('.fa-solid')?.classList.toggle('fa-chevron-down', !collapsed);
 }
 
 function setMenuOpen(open) {
     menuOpen = Boolean(open);
+    if (menuOpen) {
+        syncMenuExpansionDirection();
+        // Commit the oriented closed state before starting the expansion transition.
+        void document.getElementById('pwl-tool-rail')?.offsetWidth;
+    }
     document.body.classList.toggle('pwl-menu-open', menuOpen);
 
     const toggle = document.getElementById('pwl-menu-toggle');
@@ -555,6 +729,7 @@ function relocateGuidedActions() {
 
     relocateInputHistoryArrows();
     relocateImageGeneration();
+    target.style.setProperty('--pwl-guided-expanded-height', `${Math.ceil(actions.scrollHeight + 39)}px`);
     syncComposerActionsGeometry();
     document.body.classList.add('pwl-has-composer-actions');
 }
@@ -639,10 +814,23 @@ function syncComposerActionsGeometry() {
 
     const workspaceRect = workspace.getBoundingClientRect();
     const root = document.documentElement;
-    root.style.setProperty('--pwl-menu-left', `${Math.max(4, Math.round(workspaceRect.left - 62))}px`);
-    root.style.setProperty('--pwl-menu-top', `${Math.max(4, Math.round(workspaceRect.top))}px`);
+    const settings = getSettings();
+    if (menuDragState?.moved) {
+        // Pointer movement owns the position until the drag is committed.
+    } else {
+        const savedMenuPosition = settings.draggableMenu && applyMenuPosition(settings.menuPosition);
+        if (savedMenuPosition) {
+            settings.menuPosition = savedMenuPosition;
+        } else {
+            root.style.setProperty('--pwl-menu-left', `${Math.max(4, Math.round(workspaceRect.left - 62))}px`);
+            root.style.setProperty('--pwl-menu-top', `${Math.max(4, Math.round(workspaceRect.top))}px`);
+        }
+    }
     root.style.setProperty('--pwl-action-left', `${Math.round(workspaceRect.right + 8)}px`);
     root.style.setProperty('--pwl-action-bottom', `${Math.max(0, Math.round(window.innerHeight - workspaceRect.bottom))}px`);
+    if (menuOpen) {
+        syncMenuExpansionDirection();
+    }
 }
 
 function restoreGuidedActions() {
@@ -746,6 +934,27 @@ function injectSettings() {
                 <small id="pwl-refresh-required" role="status" hidden>
                     Refresh the page to apply this change.
                 </small>
+                <label class="checkbox_label">
+                    <input id="pwl-draggable-menu" type="checkbox">
+                    <span>Allow hamburger menu dragging</span>
+                </label>
+                <button id="pwl-settings-reset-menu-position" class="menu_button" type="button">
+                    <span class="fa-solid fa-location-crosshairs" aria-hidden="true"></span>
+                    <span>Reset Menu Position</span>
+                </button>
+                <div class="pwl-settings-group-label">Animations</div>
+                <label class="checkbox_label">
+                    <input id="pwl-animate-hamburger-menu" type="checkbox">
+                    <span>Animate hamburger menu</span>
+                </label>
+                <label class="checkbox_label">
+                    <input id="pwl-animate-composer-bar" type="checkbox">
+                    <span>Animate collapsible bar</span>
+                </label>
+                <label class="checkbox_label">
+                    <input id="pwl-animate-guided-rail" type="checkbox">
+                    <span>Animate Guided Generations rail</span>
+                </label>
                 <label class="pwl-setting-row" for="pwl-minimum-width">
                     <span>Minimum viewport width</span>
                     <input id="pwl-minimum-width" class="text_pole" type="number" min="900" max="2200" step="20">
@@ -762,10 +971,19 @@ function injectSettings() {
 
     const enabled = panel.querySelector('#pwl-enabled');
     const refreshRequired = panel.querySelector('#pwl-refresh-required');
+    const draggableMenu = panel.querySelector('#pwl-draggable-menu');
+    const resetMenuPositionButton = panel.querySelector('#pwl-settings-reset-menu-position');
+    const animateHamburgerMenu = panel.querySelector('#pwl-animate-hamburger-menu');
+    const animateComposerBar = panel.querySelector('#pwl-animate-composer-bar');
+    const animateGuidedRail = panel.querySelector('#pwl-animate-guided-rail');
     const minimumWidth = panel.querySelector('#pwl-minimum-width');
     const inspectorWidthPercent = panel.querySelector('#pwl-inspector-width-percent');
     enabled.checked = settings.enabled;
     refreshRequired.hidden = enabled.checked === enabledForSession;
+    draggableMenu.checked = settings.draggableMenu;
+    animateHamburgerMenu.checked = settings.animateHamburgerMenu;
+    animateComposerBar.checked = settings.animateComposerBar;
+    animateGuidedRail.checked = settings.animateGuidedRail;
     minimumWidth.value = settings.minimumWidth;
     inspectorWidthPercent.value = settings.inspectorWidthPercent;
 
@@ -774,6 +992,26 @@ function injectSettings() {
         refreshRequired.hidden = enabled.checked === enabledForSession;
         saveSettingsDebounced();
     });
+    draggableMenu.addEventListener('change', () => {
+        settings.draggableMenu = draggableMenu.checked;
+        saveSettingsDebounced();
+        applyDraggableMenuSetting();
+    });
+    resetMenuPositionButton.addEventListener('click', () => {
+        resetMenuPosition();
+        toastr.success('The hamburger menu has been returned to its default position.', 'ADHDBunny UI');
+    });
+    for (const [input, settingKey] of [
+        [animateHamburgerMenu, 'animateHamburgerMenu'],
+        [animateComposerBar, 'animateComposerBar'],
+        [animateGuidedRail, 'animateGuidedRail'],
+    ]) {
+        input.addEventListener('change', () => {
+            settings[settingKey] = input.checked;
+            saveSettingsDebounced();
+            applyAnimationSettings();
+        });
+    }
     minimumWidth.addEventListener('change', () => {
         settings.minimumWidth = Math.max(900, Number(minimumWidth.value) || defaults.minimumWidth);
         minimumWidth.value = settings.minimumWidth;
@@ -799,6 +1037,8 @@ function init() {
     watchDrawers();
     watchGuidedActions();
     applySettings();
+    applyDraggableMenuSetting();
+    applyAnimationSettings();
 
     if (firstInstallPending && !firstInstallNoticeShown) {
         firstInstallNoticeShown = true;
