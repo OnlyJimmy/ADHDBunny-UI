@@ -4,12 +4,13 @@ import {
     saveSettingsDebounced,
     this_chid,
 } from '../../../../script.js';
-import { extension_settings } from '../../../extensions.js';
+import { extension_settings, getContext } from '../../../extensions.js';
 
 const EXTENSION_NAME = 'ADHDBunnyUI';
 const LEGACY_EXTENSION_NAME = 'PersonalWorkspaceLayout';
 const ROOT_ID = 'pwl-workspace-controls';
 const SETTINGS_ID = 'pwl-settings';
+const GUIDED_GENERATIONS_INJECT_IDS = ['instruct', 'gg-correction-instruct', 'gg-impersonate-voice'];
 
 const defaults = {
     enabled: true,
@@ -52,6 +53,7 @@ const toolGroups = [
 
 let drawerObserver;
 let guidedObserver;
+let guidedGuideTimer;
 let resizeFrame;
 let menuOpen = false;
 let menuDismissHandlersAttached = false;
@@ -727,11 +729,105 @@ function relocateGuidedActions() {
         target.append(actions);
     }
 
+    ensureGuidedGuideControl(target, actions);
     relocateInputHistoryArrows();
     relocateImageGeneration();
     target.style.setProperty('--pwl-guided-expanded-height', `${Math.ceil(actions.scrollHeight + 39)}px`);
+    syncGuidedGuideIndicator();
     syncComposerActionsGeometry();
     document.body.classList.add('pwl-has-composer-actions');
+}
+
+function getActiveGuidedGuideInjects() {
+    const injects = getContext()?.chatMetadata?.script_injects;
+    if (!injects || typeof injects !== 'object') {
+        return [];
+    }
+
+    return GUIDED_GENERATIONS_INJECT_IDS
+        .filter(id => injects[id])
+        .map(id => ({ id, inject: injects[id] }));
+}
+
+function getGuidedGuideLabel(id) {
+    if (id === 'gg-correction-instruct') {
+        return 'Correction';
+    }
+
+    if (id === 'gg-impersonate-voice') {
+        return 'Impersonate';
+    }
+
+    return 'Guide';
+}
+
+function ensureGuidedGuideControl(target, actions) {
+    let control = document.getElementById('pwl-guided-guide-control');
+    if (!control) {
+        control = document.createElement('div');
+        control.id = 'pwl-guided-guide-control';
+        control.hidden = true;
+        control.innerHTML = `
+            <span class="pwl-guided-guide-status" aria-hidden="true"></span>
+            <button id="pwl-guided-guide-flush" type="button" title="Flush active Guided Generations prompt" aria-label="Flush active Guided Generations prompt">
+                <span class="fa-solid fa-broom" aria-hidden="true"></span>
+            </button>
+        `;
+        control.querySelector('#pwl-guided-guide-flush')?.addEventListener('click', flushGuidedGuideInjects);
+    }
+
+    if (control.parentElement !== target || control.nextElementSibling !== actions) {
+        target.insertBefore(control, actions);
+    }
+}
+
+function syncGuidedGuideIndicator() {
+    const control = document.getElementById('pwl-guided-guide-control');
+    if (!control) {
+        return;
+    }
+
+    const activeInjects = getActiveGuidedGuideInjects();
+    control.hidden = activeInjects.length === 0;
+    control.classList.toggle('is-armed', activeInjects.length > 0);
+    const labels = activeInjects.map(({ id }) => getGuidedGuideLabel(id));
+    control.title = labels.length
+        ? `Guided Generations prompt armed: ${labels.join(', ')}`
+        : 'No Guided Generations prompt is armed';
+
+    const flushButton = control.querySelector('#pwl-guided-guide-flush');
+    flushButton?.setAttribute(
+        'aria-label',
+        labels.length ? `Flush active Guided Generations prompt: ${labels.join(', ')}` : 'Flush active Guided Generations prompt',
+    );
+}
+
+async function flushGuidedGuideInjects(event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    const activeInjects = getActiveGuidedGuideInjects();
+    if (activeInjects.length === 0) {
+        syncGuidedGuideIndicator();
+        return;
+    }
+
+    const context = getContext();
+    if (typeof context?.executeSlashCommandsWithOptions !== 'function') {
+        toastr.warning('Slash command execution is not available in this view.', 'Guided Generations');
+        return;
+    }
+
+    try {
+        const command = activeInjects.map(({ id }) => `/flushinject ${id}`).join(' | ');
+        await context.executeSlashCommandsWithOptions(command);
+        toastr.success(`Flushed ${activeInjects.length} active guided prompt${activeInjects.length === 1 ? '' : 's'}.`, 'Guided Generations');
+    } catch (error) {
+        console.warn('[ADHDBunnyUI] Could not flush Guided Generations injections:', error);
+        toastr.warning('Could not flush the active Guided Generations prompt.', 'Guided Generations');
+    } finally {
+        syncGuidedGuideIndicator();
+    }
 }
 
 function relocateInputHistoryArrows() {
@@ -856,6 +952,7 @@ function restoreGuidedActions() {
     const rightSendForm = document.getElementById('rightSendForm');
     const sendButton = document.getElementById('send_but');
     document.getElementById('pwl-qig-rail-button')?.remove();
+    document.getElementById('pwl-guided-guide-control')?.remove();
     if (regularButtons && simpleSend) {
         regularButtons.prepend(simpleSend);
     }
@@ -869,6 +966,9 @@ function watchGuidedActions() {
     guidedObserver?.disconnect();
     guidedObserver = new MutationObserver(relocateGuidedActions);
     guidedObserver.observe(document.body, { childList: true, subtree: true });
+    if (!guidedGuideTimer) {
+        guidedGuideTimer = window.setInterval(syncGuidedGuideIndicator, 1000);
+    }
 }
 
 function applySettings() {
